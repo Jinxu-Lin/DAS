@@ -1,2 +1,3 @@
-# DAS
-This is the code of Diffusion Attribution Score.
+# DIFFUSION ATTRIBUTION SCORE: EVALUATING TRAINING DATA INFLUENCE IN DIFFUSION MODEL
+
+## How to run

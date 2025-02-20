@@ -1,16 +1,11 @@
 import argparse
 import os
 import torch
-from datasets import load_dataset
-from torchvision import transforms
-from diffusers import DDPMScheduler, UNet2DModel, DDPMPipeline
-import pickle
+from diffusers import DDPMScheduler, UNet2DModel
 import random
 import numpy as np
-import torch.nn.functional as F
 from trak.projectors import ProjectionType, CudaProjector
 from Tools.Dataloader import cifar2
-from torch.func import functional_call, vmap, grad 
 
 dataset_loader = {
     'cifar2': cifar2,
@@ -64,25 +59,6 @@ def get_model():
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-
-def output_function(model, params, buffers, noisy_latents, timesteps, targets, type):
-    noisy_latents = noisy_latents.unsqueeze(0)
-    timesteps = timesteps.unsqueeze(0)
-    targets = targets.unsqueeze(0)
-
-    predictions = functional_call(model, (params, buffers), args=noisy_latents, 
-                            kwargs={'timestep': timesteps, })
-    predictions = predictions.sample
-
-    if type=='mse':
-        f = F.mse_loss(predictions.float(), torch.zeros_like(targets).float(), reduction="none")
-    elif type=='l1':
-        f = F.l1_loss(predictions.float(), torch.zeros_like(targets).float(), reduction="none")
-
-    f = f.reshape(1, -1)
-    f = f.mean()
-    return f
     
 def vectorize_and_ignore_buffers(g, params_dict=None):
     """
@@ -93,12 +69,9 @@ def vectorize_and_ignore_buffers(g, params_dict=None):
     """
     batch_size = len(g[0])
     out = []
-    if params_dict is not None:
-        for b in range(batch_size):
-            out.append(torch.cat([x[b].flatten() for i, x in enumerate(g) if is_not_buffer(i, params_dict)]))
-    else:
-        for b in range(batch_size):
-            out.append(torch.cat([x[b].flatten() for x in g]))
+
+    for b in range(batch_size):
+        out.append(torch.cat([x[b].flatten() for x in g]))
     return torch.stack(out)
 
 
@@ -136,7 +109,7 @@ def parse_args():
                         dest="center_crop", help='center crop the dataset')
     parser.add_argument("--random-flip", action="store_true", default=False,
                         dest="random_flip", help='random flip the dataset')
-    parser.add_argument("--batch-size", type=int, default=64, 
+    parser.add_argument("--batch-size", type=int, default=32, 
                         dest="batch_size", help="Batch size (per device) for the training dataloader.")
     parser.add_argument("--dataloader-num-workers", type=int, default=0,
                         dest="dataloader_num_workers", help="The number of subprocesses to use for data loading. 0 means that the data will be loaded in the main process.")
@@ -154,7 +127,7 @@ def parse_args():
                         help="beta schedule for DDPM")
     
     # gradient and projector
-    parser.add_argument("--selected-timesteps", type=int, default=None,
+    parser.add_argument("--selected-timesteps", type=int, default=10,
                         dest="selected_timesteps", help="The selected timesteps for the computation of output function")
     parser.add_argument("--selected-timesteps-strategy", type=str, default='uniform',
                         dest="selected_timesteps_strategy", choices=['uniform', 'cumulative'], 
@@ -220,6 +193,48 @@ def main(args):
     params = {k: v.detach() for k, v in model.named_parameters() if v.requires_grad==True}
     buffers = {k: v.detach() for k, v in model.named_buffers() if v.requires_grad==True}
 
+    ####
+    import torch.nn.functional as F
+    delattr(F, "scaled_dot_product_attention") # Important!
+    print(hasattr(F, "scaled_dot_product_attention"))        
+    from torch.func import functional_call, vmap, grad
+
+    # define output function
+    def mse_output(params, buffers, noisy_latents, timesteps, targets):
+        noisy_latents = noisy_latents.unsqueeze(0)
+        timesteps = timesteps.unsqueeze(0)
+        targets = targets.unsqueeze(0)
+
+        predictions = functional_call(model, (params, buffers), args=noisy_latents, 
+                                kwargs={'timestep': timesteps, })
+        predictions = predictions.sample
+
+        f = F.mse_loss(predictions.float(), torch.zeros_like(targets).float(), reduction="none")
+
+        f = f.reshape(1, -1)
+        f = f.mean()
+        return f
+            
+    def l1_output(params, buffers, noisy_latents, timesteps, targets):
+        noisy_latents = noisy_latents.unsqueeze(0)
+        timesteps = timesteps.unsqueeze(0)
+        targets = targets.unsqueeze(0)
+
+        predictions = functional_call(model, (params, buffers), args=noisy_latents, 
+                                kwargs={'timestep': timesteps, })
+        predictions = predictions.sample
+        
+        f = F.l1_loss(predictions.float(), torch.zeros_like(targets).float(), reduction="none")
+
+        f = f.reshape(1, -1)
+        f = f.mean()
+        return f
+    if args.output_type=='das':
+        output_function = l1_output
+    elif args.output_type=='dtrak':
+        output_function = mse_output
+    grad_output = grad(output_function)
+
     # normalize factor
     normalize_factor = torch.sqrt(
         torch.tensor(count_parameters(model), dtype=torch.float32)
@@ -247,10 +262,6 @@ def main(args):
                             dtype=np.float32, 
                             mode='w+', 
                             shape=(dataset_len[args.dataset_type], args.proj_dim))   
-    
-    ####
-    delattr(F, "scaled_dot_product_attention") # Important!
-    print(hasattr(F, "scaled_dot_product_attention"))
       
     ####
     index_start = 0
@@ -285,25 +296,22 @@ def main(args):
                 target = noise_scheduler.get_velocity(latents, noise, timesteps)
                 
             ####
-            t_output = grad(output_function)
             t_grads = vmap(
-                t_output, 
+                grad_output, 
                 in_dims=(None, None, 0, 0, 0),
-            )(params, buffers, noisy_latents, timesteps, target, args.output_type)
-
-            t_grads = vectorize_and_ignore_buffers(list(t_grads.values()))
+            )(params, buffers, noisy_latents, timesteps, target)
+            project_grads = projector.project(t_grads, model_id=0)
+            normalized_grads = project_grads / normalize_factor
 
             if index_t==0:
-                grads = t_grads
+                grads = normalized_grads
             else:
-                grads += t_grads
+                grads += normalized_grads
             
         grads = grads / args.selected_timesteps
-        project_grads = projector.project(grads, model_id=0) # ddpm
-        normalized_grads = project_grads / normalize_factor
             
         #save gradients
-        dstore_keys[index_start:index_end] = normalized_grads.to().cpu().clone().detach().numpy()
+        dstore_keys[index_start:index_end] = grads.to().cpu().clone().detach().numpy()
         index_start = index_end
 
 if __name__ == "__main__":
