@@ -1,4 +1,4 @@
 Dataset/
-*.vscode/
-*/data/
-*/saved/
+.vscode/
+data/
+saved/
