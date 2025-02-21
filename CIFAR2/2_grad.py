@@ -1,15 +1,17 @@
-import argparse
 import os
-import torch
-from diffusers import DDPMScheduler, UNet2DModel
 import random
+import argparse
 import numpy as np
-from trak.projectors import ProjectionType, CudaProjector
-from Tools.Dataloader import cifar2
 
-dataset_loader = {
-    'cifar2': cifar2,
-}
+import torch
+import torch.nn.functional as F   
+from torch.func import functional_call, vmap, grad
+
+from diffusers import DDPMScheduler, UNet2DModel
+
+from trak.projectors import ProjectionType, CudaProjector
+
+from Tools.Dataloader.cifar2 import get_train_loader, get_test_loader, get_gen_loader
 
 dataset_len = {
     'train': 5000,
@@ -88,11 +90,11 @@ def parse_args():
                         dest="dataset", help="dataset name")
     parser.add_argument("--load-dataset", action="store_true", default=False,
                         dest="load_dataset", help='load local dataset')
-    parser.add_argument("--dataset-type", type=str, default=None,
+    parser.add_argument("--dataset-dir", type=str, default="../Dataset/CIFAR10",
+                        dest="dataset_dir", help='dataset directory')
+    parser.add_argument("--dataset-type", type=str, default='train',
                         dest="dataset_type", choices=['train', 'test', 'gen'], 
                         help='type of dataset')
-    parser.add_argument("--dataset-dir", type=str, default=None,
-                        dest="dataset_dir", help='dataset directory')
     parser.add_argument("--index-path", type=str, default=None,
                         dest="index_path", help='index path of dataset')
     parser.add_argument("--gen-path", type=str, default=None,
@@ -139,8 +141,8 @@ def parse_args():
                         dest="proj_dim", help="The dimension of gradients after projection")
     
     # save
-    parser.add_argument("--output-dir", type=str, default="./saved/grads/",
-                        dest="output_dir", help="The output directory where the model gradients will be written.")
+    parser.add_argument("--save-dir", type=str, default="./saved/grads/",
+                        dest="save_dir", help="The output directory where the model gradients will be written.")
 
     
     args = parser.parse_args()
@@ -155,21 +157,11 @@ def main(args):
     # device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    if args.dataset_type=='train':
-        dataloader = dataset_loader[args.dataset].get_train_loader(
-            args,
-        )    
-    elif args.dataset_type=='test':
-        dataloader = dataset_loader[args.dataset].get_test_loader(
-            args,
-        )
-    elif args.dataset_type=='gen':
-        dataloader = dataset_loader[args.dataset].get_gen_loader(
-            args,
-        )
-    else:
-        raise ValueError(f"Unknown dataset type: {args.dataset_type}")
-    
+    dataset_type = 'train' if 'idx-train' in args.index_path else 'test' if 'idx-test' in args.index_path else 'gen' if 'idx-gen' in args.index_path else None
+    get_loader = get_train_loader if dataset_type=='train' else get_test_loader if dataset_type=='test' else get_gen_loader if dataset_type=='gen' else None
+
+    dataloader = get_loader(args)
+
     # initialize model  
     model = get_model()
     
@@ -194,10 +186,6 @@ def main(args):
     buffers = {k: v.detach() for k, v in model.named_buffers() if v.requires_grad==True}
 
     ####
-    import torch.nn.functional as F
-    delattr(F, "scaled_dot_product_attention") # Important!
-    print(hasattr(F, "scaled_dot_product_attention"))        
-    from torch.func import functional_call, vmap, grad
 
     # define output function
     def mse_output(params, buffers, noisy_latents, timesteps, targets):
@@ -252,16 +240,14 @@ def main(args):
 
     # initialize save np array
     ####
-    filepath = os.path.join(args.output_dir, f'eseed-{args.e_seed}')
-    filename = os.path.join(filepath, f'ddpm-{args.output_type}-{args.dataset_type}-{args.selected_timesteps}-{args.proj_dim}.npy')
-    
+    filename = os.path.join(args.save_dir, f'ddpm-{args.output_type}-{dataset_type}-t{args.selected_timesteps}-d{args.proj_dim}-s{args.e_seed}.npy')
     os.makedirs(os.path.dirname(filename), exist_ok=True)
 
     #  TBD: len of dataset
     dstore_keys = np.memmap(filename, 
                             dtype=np.float32, 
                             mode='w+', 
-                            shape=(dataset_len[args.dataset_type], args.proj_dim))   
+                            shape=(dataset_len[dataset_type], args.proj_dim))   
       
     ####
     index_start = 0

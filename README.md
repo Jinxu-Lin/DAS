@@ -1,3 +1,3 @@
-# DIFFUSION ATTRIBUTION SCORE: EVALUATING TRAINING DATA INFLUENCE IN DIFFUSION MODEL
+# Diffusion Attribution Score: Evaluating Training Data Influence in Diffusion Model
 
 ## How to run

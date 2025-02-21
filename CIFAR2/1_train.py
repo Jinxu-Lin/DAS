@@ -124,8 +124,6 @@ def parse_args():
                         dest="dataloader_num_workers", help="The number of subprocesses to use for data loading. 0 means that the data will be loaded in the main process.")
     
     # ddpm
-    parser.add_argument("--model-config", type=str, default="None",
-                        dest="model_config", help="model config name or path")
     parser.add_argument("--prediction-type", type=str, default="epsilon",
                         dest="prediction_type", choices=["epsilon", "sample"],
                         help="Whether the model should predict the 'epsilon'/noise error or directly the reconstructed image 'x0'.")

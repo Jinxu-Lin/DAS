@@ -18,7 +18,6 @@ accelerate launch --gpu_ids $gpu_ids --main_process_port=$main_process_port --nu
     --shuffle \
     --batch-size 128 \
     --dataloader-num-workers 8 \
-    --model-config "config.json" \
     --learning-rate 1e-4 \
     --adam-weight-decay 1e-6 \
     --num-epochs 200 \
@@ -26,4 +25,4 @@ accelerate launch --gpu_ids $gpu_ids --main_process_port=$main_process_port --nu
     --gradient-accumulation-steps 1 \
     --logger "tensorboard" \
     --index-path "./data/idx-train.pkl" \
-    --save-dir "./saved/models/origin/seed-$seed"
+    --save-dir "./saved/models/model-$seed"
