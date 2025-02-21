@@ -185,7 +185,7 @@ def main(args):
         ####
         batch_loss_list.append(time_loss_list)
         
-    save_dir = f'{args.save_dir}/{dataset_type}-s{args.seed}-es{args.e_seed}.pkl'
+    save_dir = f'{args.save_dir}/{dataset_type}-es{args.e_seed}.pkl'
     os.makedirs(os.path.dirname(save_dir), exist_ok=True)
     with open(save_dir, 'wb') as handle:
         pickle.dump(batch_loss_list, handle)

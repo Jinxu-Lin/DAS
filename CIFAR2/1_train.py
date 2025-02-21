@@ -157,19 +157,13 @@ def parse_args():
     parser.add_argument("--save-dir", type=str, default='./saved',
                         dest="save_dir", help='save directory')
     parser.add_argument("--resume-from-checkpoint", type=str, default=None,
-                        dest="resume_from_checkpoint", 
-                        help="Whether training should be resumed from a previous checkpoint. Use a path saved by `--checkpointing_steps`, or `latest` to automatically select the last available checkpoint."
-    )
+                        dest="resume_from_checkpoint", help="Whether training should be resumed from a previous checkpoint. Use a path saved by `--checkpointing_steps`, or `latest` to automatically select the last available checkpoint.")
     parser.add_argument("--checkpointing-steps", type=int, default=500,
-                        dest="checkpointing_steps", 
-                        help="Save a checkpoint of the training state every X updates. "
-                        "These checkpoints are only suitable for resuming training using `--resume_from_checkpoint`.")
+                        dest="checkpointing_steps", help="Save a checkpoint of the training state every X updates. ")
     parser.add_argument("--gradient-accumulation-steps", type=int, default=1,
-                        dest="gradient_accumulation_steps",
-                        help="Number of updates steps to accumulate before performing a backward/update pass.")
+                        dest="gradient_accumulation_steps", help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument("--save-model-epochs", type=int, default=10,
-                        dest="save_model_epochs",
-                        help="Save the model every X epochs.")
+                        dest="save_model_epochs", help="Save the model every X epochs.")
 
     args = parser.parse_args()
     return args
