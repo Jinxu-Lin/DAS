@@ -157,15 +157,13 @@ def main(args):
     # device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # load data
     dataset_type = 'train' if 'idx-train' in args.index_path else 'test' if 'idx-test' in args.index_path else 'gen' if 'idx-gen' in args.index_path else None
     get_loader = get_train_loader if dataset_type=='train' else get_test_loader if dataset_type=='test' else get_gen_loader if dataset_type=='gen' else None
-
     dataloader = get_loader(args)
 
-    # initialize model  
+    # initialize ddpm 
     model = get_model()
-    
-    # Initialize the DDPM scheduler
     noise_scheduler = DDPMScheduler(
         num_train_timesteps=args.ddpm_num_steps,
         beta_schedule=args.ddpm_beta_schedule,
@@ -240,7 +238,7 @@ def main(args):
 
     # initialize save np array
     ####
-    filename = os.path.join(args.save_dir, f'ddpm-{args.output_type}-{dataset_type}-t{args.selected_timesteps}-d{args.proj_dim}-s{args.e_seed}.npy')
+    filename = os.path.join(args.save_dir, f'ddpm-{args.output_type}-{dataset_type}-t{args.selected_timesteps}-d{args.proj_dim}-es{args.e_seed}.npy')
     os.makedirs(os.path.dirname(filename), exist_ok=True)
 
     #  TBD: len of dataset
@@ -267,14 +265,14 @@ def main(args):
         ####
         for index_t, t in enumerate(selected_timesteps):
 
-            timesteps = torch.tensor([t]*bsz, device=latents.device)
+            timesteps = torch.tensor([t]*bsz, device=device)
             timesteps = timesteps.long()
 
             # set a seed to sample noise for each timestep
             set_seeds(args.e_seed*1000+t)
             noise = torch.randn_like(latents)
-
             noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
+
             # Get the target for loss depending on the prediction type
             if noise_scheduler.config.prediction_type == "epsilon":
                 target = noise
