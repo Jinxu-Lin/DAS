@@ -1,23 +1,13 @@
-import argparse
 import os
-from typing import Optional
+import random
+import pickle
+import argparse
+import numpy as np
 
 import torch
 import torch.nn.functional as F
 
-from datasets import load_dataset
-from huggingface_hub import HfFolder, whoami
-from torchvision import transforms
-
 from diffusers import DDPMScheduler, UNet2DModel
-from diffusers.utils import check_min_version
-
-import pickle
-
-####
-import torch
-import random
-import numpy as np
 
 from Tools.Dataloader.cifar2 import get_train_loader, get_test_loader, get_gen_loader
 
