@@ -1,0 +1,42 @@
+2025-02-25 16:31:23,598 INFO    MainThread:1019938 [wandb_setup.py:_flush():67] Current SDK version is 0.19.7
+2025-02-25 16:31:23,598 INFO    MainThread:1019938 [wandb_setup.py:_flush():67] Configure stats pid to 1019938
+2025-02-25 16:31:23,598 INFO    MainThread:1019938 [wandb_setup.py:_flush():67] Loading settings from /home/jinxulin/.config/wandb/settings
+2025-02-25 16:31:23,598 INFO    MainThread:1019938 [wandb_setup.py:_flush():67] Loading settings from /home/jinxulin/DAS/ArtBench2/wandb/settings
+2025-02-25 16:31:23,598 INFO    MainThread:1019938 [wandb_setup.py:_flush():67] Loading settings from environment variables
+2025-02-25 16:31:23,598 INFO    MainThread:1019938 [wandb_init.py:setup_run_log_directory():647] Logging user logs to /home/jinxulin/DAS/ArtBench2/wandb/run-20250225_163123-atksv1ss/logs/debug.log
+2025-02-25 16:31:23,599 INFO    MainThread:1019938 [wandb_init.py:setup_run_log_directory():648] Logging internal logs to /home/jinxulin/DAS/ArtBench2/wandb/run-20250225_163123-atksv1ss/logs/debug-internal.log
+2025-02-25 16:31:23,599 INFO    MainThread:1019938 [wandb_init.py:init():761] calling init triggers
+2025-02-25 16:31:23,599 INFO    MainThread:1019938 [wandb_init.py:init():766] wandb.init called with sweep_config: {}
+config: {'_wandb': {}}
+2025-02-25 16:31:23,599 INFO    MainThread:1019938 [wandb_init.py:init():784] starting backend
+2025-02-25 16:31:23,599 INFO    MainThread:1019938 [wandb_init.py:init():788] sending inform_init request
+2025-02-25 16:31:23,611 INFO    MainThread:1019938 [backend.py:_multiprocessing_setup():97] multiprocessing start_methods=fork,spawn,forkserver, using: spawn
+2025-02-25 16:31:23,611 INFO    MainThread:1019938 [wandb_init.py:init():803] backend started and connected
+2025-02-25 16:31:23,613 INFO    MainThread:1019938 [wandb_init.py:init():896] updated telemetry
+2025-02-25 16:31:23,650 INFO    MainThread:1019938 [wandb_init.py:init():920] communicating run to backend with 90.0 second timeout
+2025-02-25 16:31:25,595 INFO    MainThread:1019938 [wandb_init.py:init():995] starting run threads in backend
+2025-02-25 16:31:25,682 INFO    MainThread:1019938 [wandb_run.py:_console_start():2377] atexit reg
+2025-02-25 16:31:25,682 INFO    MainThread:1019938 [wandb_run.py:_redirect():2227] redirect: wrap_raw
+2025-02-25 16:31:25,682 INFO    MainThread:1019938 [wandb_run.py:_redirect():2292] Wrapping output streams.
+2025-02-25 16:31:25,682 INFO    MainThread:1019938 [wandb_run.py:_redirect():2317] Redirects installed.
+2025-02-25 16:31:25,683 INFO    MainThread:1019938 [wandb_init.py:init():1037] run started, returning control to user process
+2025-02-25 16:31:25,683 INFO    MainThread:1019938 [wandb_run.py:_config_callback():1261] config_cb None None {'seed': 0, 'logger': 'wandb', 'logging_dir': 'logs', 'wandb_name': 'Artbench2-train', 'dataset_dir': '../Dataset/ArtBench10', 'index_path': './data/idx-train.pkl', 'resolution': 256, 'shuffle': True, 'center_crop': True, 'random_flip': True, 'batch_size': 128, 'dataloader_num_workers': 8, 'model_path': '../Models/miniSD-diffusers', 'revision': None, 'rank': 128, 'learning_rate': 0.0003, 'lr_warmup_steps': 400, 'adam_beta1': 0.9, 'adam_beta2': 0.999, 'adam_weight_decay': 1e-06, 'adam_epsilon': 1e-08, 'max_grad_norm': 1.0, 'lr_scheduler': 'cosine', 'mixed_precision': 'fp16', 'num_train_epochs': 100, 'gradient_accumulation_steps': 1, 'max_train_steps': 4000, 'save_dir': './saved/models/model-0', 'resume_from_checkpoint': None, 'checkpointing_steps': 40, 'save_model_epochs': 10}
+2025-02-25 16:31:25,965 WARNING MsgRouterThr:1019938 [router.py:message_loop():77] message_loop has been closed
+Traceback (most recent call last):
+  File "/home/jinxulin/anaconda3/envs/miss/lib/python3.8/site-packages/wandb/sdk/interface/router_sock.py", line 28, in _read_message
+    resp = self._sock_client.read_server_response(timeout=1)
+  File "/home/jinxulin/anaconda3/envs/miss/lib/python3.8/site-packages/wandb/sdk/lib/sock_client.py", line 285, in read_server_response
+    data = self._read_packet_bytes(timeout=timeout)
+  File "/home/jinxulin/anaconda3/envs/miss/lib/python3.8/site-packages/wandb/sdk/lib/sock_client.py", line 270, in _read_packet_bytes
+    raise SockClientClosedError
+wandb.sdk.lib.sock_client.SockClientClosedError
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/jinxulin/anaconda3/envs/miss/lib/python3.8/site-packages/wandb/sdk/interface/router.py", line 70, in message_loop
+    msg = self._read_message()
+  File "/home/jinxulin/anaconda3/envs/miss/lib/python3.8/site-packages/wandb/sdk/interface/router_sock.py", line 30, in _read_message
+    raise MessageRouterClosedError from e
+wandb.sdk.interface.router.MessageRouterClosedError
+2025-02-25 16:31:25,966 INFO    MsgRouterThr:1019938 [mailbox.py:close():115] Closing mailbox, abandoning 2 handles.

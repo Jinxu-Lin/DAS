@@ -19,6 +19,9 @@ from diffusers.loaders import AttnProcsLayers
 from diffusers.models.attention_processor import LoRAAttnProcessor
 from diffusers.optimization import get_scheduler
 from diffusers.utils import is_wandb_available
+from diffusers.training_utils import cast_training_params
+
+from peft import LoraConfig
 
 from artbench2 import get_train_loader
 
@@ -78,6 +81,8 @@ def parse_args():
     parser.add_argument("--revision", type=str, default=None,
                         dest="revision", required=False,
                         help="Revision of pretrained model identifier from huggingface.co/models.")
+    parser.add_argument("--rank", type=int, default=128,
+                        dest="rank", help="The rank of the LoRA layers.")
     
     # optimizer and learning rate scheduler
     parser.add_argument("--learning-rate", type=float, default=1e-4,
@@ -156,7 +161,7 @@ def main(args):
     os.makedirs(args.save_dir, exist_ok=True)
 
     # load unet, vae, text_encoder, tokenizer, noise_scheduler
-    pipe = StableDiffusionPipeline.from_pretrained(args.model_path, revision=args.revision, local_files_only=True)
+    pipe = StableDiffusionPipeline.from_pretrained(args.model_path, revision=args.revision, local_files_only=True, use_safetensors=False)
     unet = pipe.unet
     vae = pipe.vae
     text_encoder = pipe.text_encoder
@@ -185,35 +190,22 @@ def main(args):
     train_dataloader = get_train_loader(args, tokenizer) 
 
     # Set LoRA layers
-    lora_attn_procs = {}
-    for name in unet.attn_processors.keys():
-        cross_attention_dim = None if name.endswith("attn1.processor") else unet.config.cross_attention_dim
-        if name.startswith("mid_block"):
-            hidden_size = unet.config.block_out_channels[-1]
-        elif name.startswith("up_blocks"):
-            block_id = int(name[len("up_blocks.")])
-            hidden_size = list(reversed(unet.config.block_out_channels))[block_id]
-        elif name.startswith("down_blocks"):
-            block_id = int(name[len("down_blocks.")])
-            hidden_size = unet.config.block_out_channels[block_id]
-
-        lora_attn_procs[name] = LoRAAttnProcessor(hidden_size=hidden_size, 
-                                                  cross_attention_dim=cross_attention_dim,
-                                                  rank=128,
-                                                 )
-
-    unet.set_attn_processor(lora_attn_procs)
-    
-    ####
-    for n, m in unet.named_modules():
-        if ('attn' in n) and (isinstance(m, torch.nn.Dropout)):
-            m.p = 0.1
-
-    lora_layers = AttnProcsLayers(unet.attn_processors)
+    unet_lora_config = LoraConfig(
+        r=args.rank,
+        lora_alpha=args.rank,
+        init_lora_weights="gaussian",
+        target_modules=["to_k", "to_q", "to_v", "to_out.0"],
+    )
+    # Add adapter and make sure the trainable params are in float32.
+    unet.add_adapter(unet_lora_config)
+    if args.mixed_precision == "fp16":
+        # only upcast trainable parameters (LoRA) into fp32
+        cast_training_params(unet, dtype=torch.float32)
+    lora_layers = filter(lambda p: p.requires_grad, unet.parameters())
 
     # Initialize the optimizer
     optimizer = torch.optim.AdamW(
-        lora_layers.parameters(),
+        lora_layers,
         lr=args.learning_rate,
         betas=(args.adam_beta1, args.adam_beta2),
         weight_decay=args.adam_weight_decay,

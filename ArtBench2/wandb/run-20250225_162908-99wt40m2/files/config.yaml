@@ -1,0 +1,98 @@
+_wandb:
+    value:
+        cli_version: 0.19.7
+        m: []
+        python_version: 3.8.20
+        t:
+            "1":
+                - 1
+                - 11
+                - 41
+                - 49
+                - 51
+                - 55
+                - 71
+                - 83
+                - 98
+            "2":
+                - 1
+                - 11
+                - 41
+                - 49
+                - 51
+                - 55
+                - 71
+                - 83
+                - 98
+            "3":
+                - 23
+                - 55
+            "4": 3.8.20
+            "5": 0.19.7
+            "6": 4.46.3
+            "8":
+                - 5
+            "12": 0.19.7
+            "13": linux-x86_64
+adam_beta1:
+    value: 0.9
+adam_beta2:
+    value: 0.999
+adam_epsilon:
+    value: 1e-08
+adam_weight_decay:
+    value: 1e-06
+batch_size:
+    value: 128
+center_crop:
+    value: true
+checkpointing_steps:
+    value: 20
+dataloader_num_workers:
+    value: 8
+dataset_dir:
+    value: ../Dataset/ArtBench10
+gradient_accumulation_steps:
+    value: 1
+index_path:
+    value: ./data/idx-train.pkl
+learning_rate:
+    value: 0.0003
+logger:
+    value: wandb
+logging_dir:
+    value: logs
+lr_scheduler:
+    value: cosine
+lr_warmup_steps:
+    value: 200
+max_grad_norm:
+    value: 1
+max_train_steps:
+    value: 2000
+mixed_precision:
+    value: fp16
+model_path:
+    value: ../Models/miniSD-diffusers
+num_train_epochs:
+    value: 100
+random_flip:
+    value: true
+rank:
+    value: 128
+resolution:
+    value: 256
+resume_from_checkpoint:
+    value: null
+revision:
+    value: null
+save_dir:
+    value: ./saved/models/model-0
+save_model_epochs:
+    value: 10
+seed:
+    value: 0
+shuffle:
+    value: true
+wandb_name:
+    value: Artbench2-train

@@ -10,7 +10,7 @@ export MODEL_NAME="lambdalabs/miniSD-diffusers"
 export DATASET_NAME="data/artbench-10-imagefolder/**"
 export HF_HOME="~/codes/.cache/huggingface"
 
-accelerate launch --gpu_ids $gpu_ids --main_process_port=$main_process_port 1_train.py \
+accelerate launch --gpu_ids $gpu_ids --main_process_port=$main_process_port --num_processes 1 1_train.py \
     --seed $seed \
     --logger "wandb" \
     --wandb-name "Artbench2-train" \
