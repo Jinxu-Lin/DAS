@@ -12,10 +12,13 @@ export HF_HOME="~/codes/.cache/huggingface"
 
 accelerate launch --gpu_ids $gpu_ids --main_process_port=$main_process_port --num_processes=1 1_train.py \
     --seed=$seed \
+    --logger "tensorboard" \
     --load-dataset \
     --dataset-dir "../Dataset/CIFAR10" \
     --resolution 32 \
     --shuffle \
+    --center-crop \
+    --random-flip \
     --batch-size 128 \
     --dataloader-num-workers 8 \
     --learning-rate 1e-4 \
@@ -23,6 +26,5 @@ accelerate launch --gpu_ids $gpu_ids --main_process_port=$main_process_port --nu
     --num-epochs 200 \
     --checkpointing-steps -1 \
     --gradient-accumulation-steps 1 \
-    --logger "tensorboard" \
     --index-path "./data/idx-train.pkl" \
     --save-dir "./saved/models/model-$seed"

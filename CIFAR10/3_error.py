@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 from diffusers import DDPMScheduler, UNet2DModel
 
-from Tools.Dataloader.cifar2 import get_train_loader, get_test_loader, get_gen_loader
+from CIFAR2.cifar2 import get_train_loader, get_test_loader, get_gen_loader
 
 def set_seeds(seed):
     

@@ -3,7 +3,6 @@ import math
 import argparse
 import logging
 import random
-import inspect
 import numpy as np
 from tqdm import tqdm
 
@@ -17,11 +16,7 @@ from accelerate.utils import ProjectConfiguration, set_seed
 from diffusers import UNet2DModel, DDPMScheduler, DDPMPipeline
 from diffusers.optimization import get_scheduler
 
-from Tools.Dataloader import cifar2
-
-dataset_loader = {
-    'cifar2': cifar2,
-}
+from CIFAR2.cifar2 import get_train_loader
 
 def set_seeds(seed):
     set_seed(seed)
@@ -98,8 +93,6 @@ def parse_args():
                         dest="logging_dir", help='logging directory')
 
     # dataset
-    parser.add_argument("--dataset", type=str, default="cifar2",
-                        dest="dataset", help="dataset name")
     parser.add_argument("--load-dataset", action="store_true", default=False,
                         dest="load_dataset", help='load local dataset')
     parser.add_argument("--dataset-dir", type=str, default=None,
@@ -108,8 +101,6 @@ def parse_args():
                         dest="index_path", help='index path')
     
     # data loader
-    parser.add_argument("--data-aug", action="store_true", default=True,
-                        dest="data_aug", help='data augmentation')
     parser.add_argument("--resolution", type=int, default=32,
                         dest="resolution", help='resolution of the dataset')
     parser.add_argument("--shuffle", action="store_true", default=False,
@@ -145,13 +136,14 @@ def parse_args():
     parser.add_argument("--adam-epsilon", type=float, default=1e-8,
                         dest="adam_epsilon", help="Epsilon value for the Adam optimizer.")
     parser.add_argument("--lr-scheduler", type=str, default="cosine",
-                        dest="lr_scheduler", 
-                        choices=["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"],
+                        dest="lr_scheduler", choices=["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"],
                         help='The scheduler type to use. Choose between ["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"]')
 
     # train
     parser.add_argument("--num-epochs", type=int, default=200,
                         dest="num_epochs", help="number of epochs")
+    parser.add_argument("--gradient-accumulation-steps", type=int, default=1,
+                        dest="gradient_accumulation_steps", help="Number of updates steps to accumulate before performing a backward/update pass.")
 
     # save
     parser.add_argument("--save-dir", type=str, default='./saved',
@@ -160,8 +152,6 @@ def parse_args():
                         dest="resume_from_checkpoint", help="Whether training should be resumed from a previous checkpoint. Use a path saved by `--checkpointing_steps`, or `latest` to automatically select the last available checkpoint.")
     parser.add_argument("--checkpointing-steps", type=int, default=500,
                         dest="checkpointing_steps", help="Save a checkpoint of the training state every X updates. ")
-    parser.add_argument("--gradient-accumulation-steps", type=int, default=1,
-                        dest="gradient_accumulation_steps", help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument("--save-model-epochs", type=int, default=10,
                         dest="save_model_epochs", help="Save the model every X epochs.")
 
@@ -191,11 +181,11 @@ def main(args):
 
     logger.info(accelerator.state, main_process_only=False)
 
+    # Initialize save path
+    os.makedirs(args.save_dir, exist_ok=True)
+
     # Load dataset
-    logger.info(f"Loading dataset {args.dataset}...")
-    train_dataloader = dataset_loader[args.dataset].get_train_loader(
-        args,
-    )
+    train_dataloader = get_train_loader(args)
 
     # Initialize model
     model = get_model()
@@ -273,7 +263,7 @@ def main(args):
             args.resume_from_checkpoint = None
         else:
             accelerator.print(f"Resuming from checkpoint {path}")
-            accelerator.load_state(os.path.join(args.output_dir, path))
+            accelerator.load_state(os.path.join(args.save_dir, path))
             global_step = int(path.split("-")[1])
 
             resume_global_step = global_step * args.gradient_accumulation_steps

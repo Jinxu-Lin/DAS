@@ -11,7 +11,7 @@ from diffusers import DDPMScheduler, UNet2DModel
 
 from trak.projectors import ProjectionType, CudaProjector
 
-from Tools.Dataloader.cifar2 import get_train_loader, get_test_loader, get_gen_loader
+from CIFAR2.cifar2 import get_train_loader, get_test_loader, get_gen_loader
 
 dataset_len = {
     'train': 5000,
