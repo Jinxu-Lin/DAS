@@ -1,0 +1,15 @@
+{"time":"2025-02-25T17:09:45.12392135+11:00","level":"INFO","msg":"stream: starting","core version":"0.19.7","symlink path":"/home/jinxulin/DAS/ArtBench2/wandb/run-20250225_170945-kr3pb43t/logs/debug-core.log"}
+{"time":"2025-02-25T17:09:45.227873962+11:00","level":"INFO","msg":"created new stream","id":"kr3pb43t"}
+{"time":"2025-02-25T17:09:45.227944504+11:00","level":"INFO","msg":"stream: started","id":"kr3pb43t"}
+{"time":"2025-02-25T17:09:45.228071517+11:00","level":"INFO","msg":"writer: Do: started","stream_id":"kr3pb43t"}
+{"time":"2025-02-25T17:09:45.22808828+11:00","level":"INFO","msg":"sender: started","stream_id":"kr3pb43t"}
+{"time":"2025-02-25T17:09:45.228169925+11:00","level":"INFO","msg":"handler: started","stream_id":"kr3pb43t"}
+{"time":"2025-02-25T17:09:48.5214819+11:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-02-25T17:09:48.836330863+11:00","level":"INFO","msg":"stream: closing","id":"kr3pb43t"}
+{"time":"2025-02-25T17:09:48.83634753+11:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-02-25T17:09:48.83684849+11:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-02-25T17:09:49.823218417+11:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-02-25T17:09:52.511352951+11:00","level":"INFO","msg":"handler: closed","stream_id":"kr3pb43t"}
+{"time":"2025-02-25T17:09:52.511460905+11:00","level":"INFO","msg":"sender: closed","stream_id":"kr3pb43t"}
+{"time":"2025-02-25T17:09:52.511447614+11:00","level":"INFO","msg":"writer: Close: closed","stream_id":"kr3pb43t"}
+{"time":"2025-02-25T17:09:52.511592093+11:00","level":"INFO","msg":"stream: closed","id":"kr3pb43t"}

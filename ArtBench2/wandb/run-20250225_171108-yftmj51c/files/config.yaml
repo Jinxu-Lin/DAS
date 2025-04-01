@@ -1,0 +1,136 @@
+_wandb:
+    value:
+        cli_version: 0.19.7
+        m: []
+        python_version: 3.8.20
+        t:
+            "1":
+                - 1
+                - 11
+                - 41
+                - 49
+                - 51
+                - 55
+                - 71
+                - 83
+                - 98
+            "2":
+                - 1
+                - 11
+                - 41
+                - 49
+                - 51
+                - 55
+                - 71
+                - 83
+                - 98
+            "3":
+                - 23
+                - 55
+            "4": 3.8.20
+            "5": 0.19.7
+            "6": 4.46.3
+            "8":
+                - 5
+            "12": 0.19.7
+            "13": linux-x86_64
+adam_beta1:
+    value: 0.9
+adam_beta2:
+    value: 0.999
+adam_epsilon:
+    value: 1e-08
+adam_weight_decay:
+    value: 0.01
+allow_tf32:
+    value: false
+cache_dir:
+    value: null
+caption_column:
+    value: text
+center_crop:
+    value: true
+checkpointing_steps:
+    value: 500
+checkpoints_total_limit:
+    value: null
+dataloader_num_workers:
+    value: 8
+dataset_config_name:
+    value: null
+dataset_name:
+    value: lambdalabs/naruto-blip-captions
+enable_xformers_memory_efficient_attention:
+    value: false
+gradient_accumulation_steps:
+    value: 4
+gradient_checkpointing:
+    value: false
+hub_model_id:
+    value: null
+hub_token:
+    value: null
+image_column:
+    value: image
+learning_rate:
+    value: 0.0001
+local_rank:
+    value: -1
+logging_dir:
+    value: logs
+lr_scheduler:
+    value: cosine
+lr_warmup_steps:
+    value: 0
+max_grad_norm:
+    value: 1
+max_train_samples:
+    value: null
+max_train_steps:
+    value: 15000
+mixed_precision:
+    value: null
+noise_offset:
+    value: 0
+num_train_epochs:
+    value: 50
+num_validation_images:
+    value: 4
+output_dir:
+    value: ./finetune/lora/naruto
+prediction_type:
+    value: null
+pretrained_model_name_or_path:
+    value: ../Models/miniSD-diffusers
+push_to_hub:
+    value: false
+random_flip:
+    value: true
+rank:
+    value: 4
+report_to:
+    value: wandb
+resolution:
+    value: 512
+resume_from_checkpoint:
+    value: null
+revision:
+    value: null
+scale_lr:
+    value: false
+seed:
+    value: 1337
+snr_gamma:
+    value: null
+train_batch_size:
+    value: 1
+train_data_dir:
+    value: null
+use_8bit_adam:
+    value: false
+validation_epochs:
+    value: 1
+validation_prompt:
+    value: A naruto with blue eyes.
+variant:
+    value: null

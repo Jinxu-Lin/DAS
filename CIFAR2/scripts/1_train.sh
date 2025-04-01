@@ -27,4 +27,4 @@ accelerate launch --gpu_ids $gpu_ids --main_process_port=$main_process_port --nu
     --checkpointing-steps -1 \
     --gradient-accumulation-steps 1 \
     --index-path "./data/idx-train.pkl" \
-    --save-dir "./saved/models/model-$seed"
+    --output-dir "./saved/models/model-$seed"

@@ -11,9 +11,11 @@ import torch.utils.checkpoint
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed
-
+import datasets
+import transformers
+import diffusers
 from tqdm.auto import tqdm
-
+from transformers import CLIPTextModel, CLIPTokenizer
 from diffusers import AutoencoderKL, DDPMScheduler, DiffusionPipeline, UNet2DConditionModel, StableDiffusionPipeline
 from diffusers.loaders import AttnProcsLayers
 from diffusers.models.attention_processor import LoRAAttnProcessor
@@ -24,6 +26,8 @@ from diffusers.training_utils import cast_training_params
 from peft import LoraConfig
 
 from artbench2 import get_train_loader
+
+logger = get_logger(__name__, log_level="INFO")
 
 def set_seeds(seed):
     set_seed(seed)
@@ -136,12 +140,6 @@ def main(args):
     set_seeds(args.seed)
     
     # Initialize logger and accelerator
-    logger = get_logger(__name__, log_level="INFO")
-    logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
-    )
     logging_dir = os.path.join(args.save_dir, args.logging_dir)
 
     accelerator_project_config = ProjectConfiguration(logging_dir=logging_dir)
@@ -150,23 +148,48 @@ def main(args):
         log_with=args.logger,
         project_config=accelerator_project_config,
     )
-    if args.logger == "wandb":
-        if not is_wandb_available():
-            raise ImportError("Make sure to install wandb if you want to use it for logging during training.")
-        import wandb
 
+    # Disable AMP for MPS.
+    if torch.backends.mps.is_available():
+        accelerator.native_amp = False
+
+    # Make one log on every process with the configuration for debugging.
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO,
+    )
     logger.info(accelerator.state, main_process_only=False)
+    if accelerator.is_local_main_process:
+        datasets.utils.logging.set_verbosity_warning()
+        transformers.utils.logging.set_verbosity_warning()
+        diffusers.utils.logging.set_verbosity_info()
+    else:
+        datasets.utils.logging.set_verbosity_error()
+        transformers.utils.logging.set_verbosity_error()
+        diffusers.utils.logging.set_verbosity_error()
 
-    # Initialize save path
-    os.makedirs(args.save_dir, exist_ok=True)
+    # Handle the repository creation
+    if accelerator.is_main_process:
+        if args.output_dir is not None:
+            os.makedirs(args.output_dir, exist_ok=True)
 
     # load unet, vae, text_encoder, tokenizer, noise_scheduler
-    pipe = StableDiffusionPipeline.from_pretrained(args.model_path, revision=args.revision, local_files_only=True, use_safetensors=False)
-    unet = pipe.unet
-    vae = pipe.vae
-    text_encoder = pipe.text_encoder
-    tokenizer = pipe.tokenizer
-    noise_scheduler = pipe.scheduler
+    noise_scheduler = DDPMScheduler.from_pretrained(
+        args.model_path, subfolder="scheduler", use_safetensors=False
+    )
+    tokenizer = CLIPTokenizer.from_pretrained(
+        args.model_path, subfolder="tokenizer", revision=args.revision, use_safetensors=False
+    )
+    text_encoder = CLIPTextModel.from_pretrained(
+        args.model_path, subfolder="text_encoder", revision=args.revision
+    )
+    vae = AutoencoderKL.from_pretrained(
+        args.model_path, subfolder="vae", revision=args.revision, variant=args.variant, use_safetensors=False
+    )
+    unet = UNet2DConditionModel.from_pretrained(
+        args.model_path, subfolder="unet", revision=args.revision, variant=args.variant, use_safetensors=False
+    )
 
     # freeze parameters of models to save more memory
     unet.requires_grad_(False)
@@ -187,7 +210,10 @@ def main(args):
     text_encoder.to(accelerator.device, dtype=weight_dtype)
 
     # Load dataset
-    train_dataloader = get_train_loader(args, tokenizer) 
+    empty_inputs = tokenizer(
+        [''], max_length=tokenizer.model_max_length, padding="max_length", truncation=True, return_tensors="pt"
+    )
+    train_dataloader = get_train_loader(args, tokenizer, empty_inputs) 
 
     # Set LoRA layers
     unet_lora_config = LoraConfig(

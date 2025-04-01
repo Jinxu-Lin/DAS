@@ -97,6 +97,10 @@ def get_train_loader(args, tokenizer: PreTrainedTokenizer, empty_inputs):
     # Preprocessing the datasets.
     # We need to tokenize inputs and targets.
     column_names = dataset["train"].column_names
+    args.dataset_name = "artbench"
+    args.image_column = "image"
+    args.caption_column = "label"
+    args.max_train_samples = None
 
     # 6. Get the column names for input/target.
     dataset_columns = DATASET_NAME_MAPPING.get(args.dataset_name, None)

@@ -5,18 +5,22 @@ import logging
 import random
 import numpy as np
 from tqdm import tqdm
-
+import datasets
+import diffusers
 import torch
 import torch.nn.functional as F
 
-from accelerate import Accelerator
+from datetime import timedelta
+from accelerate import Accelerator, InitProcessGroupKwargs
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed
 
 from diffusers import UNet2DModel, DDPMScheduler, DDPMPipeline
 from diffusers.optimization import get_scheduler
 
-from CIFAR2.cifar2 import get_train_loader
+from cifar2 import get_train_loader
+
+logger = get_logger(__name__, log_level="INFO")
 
 def set_seeds(seed):
     set_seed(seed)
@@ -140,14 +144,16 @@ def parse_args():
                         help='The scheduler type to use. Choose between ["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"]')
 
     # train
+    parser.add_argument("--mixed-precision", type=str, default="no",
+                        choices=["no", "fp16", "bf16"], help="Whether to use mixed precision.")
     parser.add_argument("--num-epochs", type=int, default=200,
                         dest="num_epochs", help="number of epochs")
     parser.add_argument("--gradient-accumulation-steps", type=int, default=1,
                         dest="gradient_accumulation_steps", help="Number of updates steps to accumulate before performing a backward/update pass.")
 
     # save
-    parser.add_argument("--save-dir", type=str, default='./saved',
-                        dest="save_dir", help='save directory')
+    parser.add_argument("--output-dir", type=str, default='./saved',
+                        dest="output_dir", help='save directory')
     parser.add_argument("--resume-from-checkpoint", type=str, default=None,
                         dest="resume_from_checkpoint", help="Whether training should be resumed from a previous checkpoint. Use a path saved by `--checkpointing_steps`, or `latest` to automatically select the last available checkpoint.")
     parser.add_argument("--checkpointing-steps", type=int, default=500,
@@ -165,37 +171,53 @@ def main(args):
     set_seeds(args.seed)
 
     # Initialize logger and accelerator
-    logger = get_logger(__name__, log_level="INFO")
+    logging_dir = os.path.join(args.output_dir, args.logging_dir)
+    accelerator_project_config = ProjectConfiguration(project_dir=args.output_dir, logging_dir=logging_dir)
+
+    accelerator = Accelerator(
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        mixed_precision=args.mixed_precision,
+        log_with=args.logger,
+        project_config=accelerator_project_config,
+    )
+
+    # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
-    logging_dir = os.path.join(args.save_dir, args.logging_dir)
-
-    accelerator_project_config = ProjectConfiguration(logging_dir=logging_dir)
-    accelerator = Accelerator(
-        log_with=args.logger,
-        project_config=accelerator_project_config,
-    )
-
     logger.info(accelerator.state, main_process_only=False)
+    if accelerator.is_local_main_process:
+        datasets.utils.logging.set_verbosity_warning()
+        diffusers.utils.logging.set_verbosity_info()
+    else:
+        datasets.utils.logging.set_verbosity_error()
+        diffusers.utils.logging.set_verbosity_error()
 
-    # Initialize save path
-    os.makedirs(args.save_dir, exist_ok=True)
+    # Handle the repository creation
+    if accelerator.is_main_process:
+        if args.output_dir is not None:
+            os.makedirs(args.output_dir, exist_ok=True)
 
     # Load dataset
     train_dataloader = get_train_loader(args)
 
     # Initialize model
     model = get_model()
-        
-    # Initialize the DDPM scheduler
     noise_scheduler = DDPMScheduler(
         num_train_timesteps=args.ddpm_num_steps,
         beta_schedule=args.ddpm_beta_schedule,
         prediction_type=args.prediction_type,
     )
+
+    weight_dtype = torch.float32
+    if accelerator.mixed_precision == "fp16":
+        weight_dtype = torch.float16
+        args.mixed_precision = accelerator.mixed_precision
+    elif accelerator.mixed_precision == "bf16":
+        weight_dtype = torch.bfloat16
+        args.mixed_precision = accelerator.mixed_precision
 
     # Initialize the optimizer
     optimizer = torch.optim.AdamW(
@@ -251,7 +273,7 @@ def main(args):
             path = os.path.basename(args.resume_from_checkpoint)
         else:
             # Get the most recent checkpoint
-            dirs = os.listdir(args.save_dir)
+            dirs = os.listdir(args.output_dir)
             dirs = [d for d in dirs if d.startswith("checkpoint")]
             dirs = sorted(dirs, key=lambda x: int(x.split("-")[1]))
             path = dirs[-1] if len(dirs) > 0 else None
@@ -263,7 +285,7 @@ def main(args):
             args.resume_from_checkpoint = None
         else:
             accelerator.print(f"Resuming from checkpoint {path}")
-            accelerator.load_state(os.path.join(args.save_dir, path))
+            accelerator.load_state(os.path.join(args.output_dir, path))
             global_step = int(path.split("-")[1])
 
             resume_global_step = global_step * args.gradient_accumulation_steps
@@ -286,9 +308,9 @@ def main(args):
                     progress_bar.update(1)
                 continue
 
-            clean_images = batch["input"]
+            clean_images = batch["input"].to(weight_dtype)
             # Sample noise that we'll add to the images
-            noise = torch.randn(clean_images.shape).to(clean_images.device)
+            noise = torch.randn(clean_images.shape, dtype=weight_dtype).to(clean_images.device)
             # Number of images in this batch
             num_images = clean_images.shape[0]
             # Sample a random timestep for each image
@@ -335,7 +357,7 @@ def main(args):
 
                 if global_step % args.checkpointing_steps == 0:
                     if accelerator.is_main_process:
-                        save_path = f"{args.save_dir}/checkpoint-{global_step}"
+                        save_path = f"{args.output_dir}/checkpoint-{global_step}"
                         os.makedirs(save_path, exist_ok=True)
                         accelerator.save_state(save_path)
                         logger.info(f"Saved state to {save_path}")
@@ -360,8 +382,8 @@ def main(args):
                     scheduler=noise_scheduler,
                 )
 
-                os.makedirs(args.save_dir, exist_ok=True)
-                pipeline.save_pretrained(args.save_dir)
+                os.makedirs(args.output_dir, exist_ok=True)
+                pipeline.save_pretrained(args.output_dir)
 
     accelerator.end_training()
 
