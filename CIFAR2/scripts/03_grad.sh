@@ -5,8 +5,6 @@ echo "dataset_type: $3"
 echo "dataset_index: $4"
 echo "split: $5"
 
-echo "ckpt: $6"
-
 echo "loss_function_type: $6"
 echo "timestep_strategy: $7"
 echo "num_timesteps_avg: $8"
@@ -32,4 +30,3 @@ CUDA_VISIBLE_DEVICES=$1 python 03_grad.py \
     --num_timesteps_avg=$8 \
     --projection_dim=$9 \
     --save_path="./saved/grad_$2" \
-    
