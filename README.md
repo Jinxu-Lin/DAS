@@ -48,11 +48,7 @@ Our experiments were conducted on six datasets: CIFAR2, CIFAR10, ArtBench2, ArtB
     ```
 
 2.  **Prepare the Dataset:**
-    Run the `00_dataset.ipynb` notebook to generate the CIFAR2 dataset and prepare the necessary subsets for Latent Diffusion Score (LDS).
-
-    ```bash
-    jupyter notebook 00_dataset.ipynb
-    ```
+    Run the `00_dataset.ipynb` notebook to generate the CIFAR2 dataset and prepare the necessary subsets for LDS.
 
 3.  **Train the Diffusion Model:**
     Use the provided script to train a diffusion model.
