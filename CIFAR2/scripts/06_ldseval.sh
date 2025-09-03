@@ -1,8 +1,8 @@
 echo "gpu_ids: $1"
 echo "e_seed: $2"
-echo "setting: $3"
 
-echo "index: $4"
+echo "dataset_type: $3"
+echo "dataset_index: $4"
 
 echo "start: $5"
 echo "end: $6"
@@ -19,21 +19,21 @@ do
         echo "Evaluating sub-model ${model_index} with seed ${seed}"
         
         # Sub-model path
-        model_path="./saved/$3/lds-val/ddpm-sub-${model_index}-${seed}"
         
         CUDA_VISIBLE_DEVICES=$1 python 04_eval.py \
-            --dataset_name="cifar10" \
-            --dataloader_num_workers=8 \
+            --seed=$seed \
+            --e_seed=$2 \
             --model_config_name_or_path="config.json" \
+            --model_path="./saved/lds-val/ddpm-sub-${model_index}-${seed}" \
+            --dataset_type=$3 \
+            --dataset_name_or_path="../../../Resources/Datasets/CIFAR10" \
+            --index_path="./data/indices/$4" \
+            --gen_path="./saved/$3/gen" \
+            --dataloader_num_workers=8 \
             --resolution=32 --center_crop \
             --train_batch_size=256 \
-            --index_path=./data/indices/$3/$4 \
-            --gen_path=./saved/$3/gen \
-            --model_path=${model_path} \
-            --output_dir=./saved/$3/lds-val \
-            --model_index=${model_index} \
-            --e_seed=$2 \
-            --seed=${seed}
+            --save_path="./saved/lds-val/ddpm-sub-${index}-${seed}" \
+            
     done
 done
 

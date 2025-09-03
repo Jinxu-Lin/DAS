@@ -27,6 +27,7 @@ check_min_version("0.16.0")
 
 def set_seeds(seed):
     """Set seeds for reproducibility"""
+    
     set_seed(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -43,7 +44,7 @@ def parse_args():
     # Core training parameters
     parser.add_argument("--dataset_name_or_path", type=str, default="cifar10", help="Dataset name or path to local dataset")
     parser.add_argument("--model_config_name_or_path", type=str, required=True, help="UNet model config path")
-    parser.add_argument("--save_dir", type=str, required=True, help="Output directory for model and checkpoints")
+    parser.add_argument("--save_path", type=str, required=True, help="Output Path for model and checkpoints")
     parser.add_argument("--index_path", type=str, required=True, help="Path to training indices pickle file")
     
     # Data parameters
@@ -112,8 +113,8 @@ def load_train_dataset(args, logger):
     return dataset
 
 
-def load_dataset_from_index(dataset, args,logger):
-    """Load subset indices"""
+def select_dataset_from_index(dataset, args, logger):
+    """Select dataset by subset indices"""
     
     logger.info(f"Loading indices from {args.index_path}")
     with open(args.index_path, 'rb') as handle:
@@ -244,7 +245,7 @@ def train_epoch(model, train_dataloader, noise_scheduler, optimizer, lr_schedule
             # Save checkpoint
             if global_step % args.checkpointing_steps == 0:
                 if accelerator.is_main_process:
-                    save_path = os.path.join(args.save_dir, f"checkpoint-{global_step}")
+                    save_path = os.path.join(args.save_path, f"checkpoint-{global_step}")
                     accelerator.save_state(save_path)
                     logger.info(f"Saved state to {save_path}")
         
@@ -301,8 +302,8 @@ def save_model(model, noise_scheduler, accelerator, args, logger):
     unet.eval()
     
     pipeline = DDPMPipeline(unet=unet, scheduler=noise_scheduler)
-    pipeline.save_pretrained(args.save_dir)
-    logger.info(f"Model saved to {args.save_dir}")
+    pipeline.save_pretrained(args.save_path)
+    logger.info(f"Model saved to {args.save_path}")
 
 
 def main():
@@ -336,9 +337,9 @@ def main():
     )
     logger.info(accelerator.state, main_process_only=False)
     
-    # Create output directory
+    # Create save path
     if accelerator.is_main_process:
-        os.makedirs(args.save_dir, exist_ok=True)
+        os.makedirs(args.save_path, exist_ok=True)
     
     # Initialize model
     model = create_model(args.model_config_name_or_path)
@@ -346,7 +347,7 @@ def main():
     # Load training dataset
     dataset = load_train_dataset(args, logger)
     # Select training set by indices
-    dataset = load_dataset_from_index(dataset, args, logger)
+    dataset = select_dataset_from_index(dataset, args, logger)
     # Create dataloader
     train_dataloader = create_dataloader(dataset, args, logger)
     

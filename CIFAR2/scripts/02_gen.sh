@@ -7,7 +7,7 @@ export HF_HOME="~/codes/.cache/huggingface"
 CUDA_VISIBLE_DEVICES=$1 python 02_gen.py \
     --model_config_name_or_path="config.json" \
     --train_batch_size=256 \
-    --model_path=./saved/$3/ddpm \
+    --model_path="./saved/$3/ddpm" \
     --gen_seed=$2 \
-    --output_dir=./saved/$3/gen
+    --save_path="./saved/$3/gen"
 

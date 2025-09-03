@@ -15,6 +15,7 @@ check_min_version("0.16.0")
 
 def set_seeds(seed):
     """Set seeds for reproducibility"""
+    
     set_seed(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -31,7 +32,7 @@ def parse_args():
     # Core parameters
     parser.add_argument("--model_config_name_or_path", type=str, required=True, help="UNet model config path")
     parser.add_argument("--model_path", type=str, required=True, help="Path to pretrained model")
-    parser.add_argument("--output_dir", type=str, required=True, help="Output directory for generated images")
+    parser.add_argument("--save_path", type=str, required=True, help="Save Path for generated images")
     
     # Generation parameters
     parser.add_argument("--train_batch_size", type=int, default=256, help="Batch size for generation")
@@ -83,8 +84,8 @@ def generate_images(pipeline, args, logger):
     logger.info(f"Generating {args.num_images} images with batch size {args.train_batch_size}")
     logger.info(f"Inference steps: {args.num_inference_steps}, eta: {args.eta}")
     
-    # Create output directory
-    os.makedirs(args.output_dir, exist_ok=True)
+    # Create save path
+    os.makedirs(args.save_path, exist_ok=True)
     
     total_generated = 0
     
@@ -115,13 +116,13 @@ def generate_images(pipeline, args, logger):
         images_pil = pipeline.numpy_to_pil(images)
         
         for idx, image in enumerate(images_pil):
-            image_path = os.path.join(args.output_dir, f'{i + idx}.png')
+            image_path = os.path.join(args.save_path, f'{i + idx}.png')
             image.save(image_path)
             total_generated += 1
         
         logger.info(f"Saved {len(images_pil)} images, total: {total_generated}/{args.num_images}")
     
-    logger.info(f"Generation complete! Saved {total_generated} images to {args.output_dir}")
+    logger.info(f"Generation complete! Saved {total_generated} images to {args.save_path}")
 
 
 def main():

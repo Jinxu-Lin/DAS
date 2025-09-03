@@ -3,25 +3,30 @@ import logging
 import os
 import random
 import numpy as np
-import torch
-import torch.nn.functional as F
-from accelerate.utils import set_seed
-from datasets import load_dataset, DatasetDict, Dataset, Image
-from torchvision import transforms
 import pandas as pd
 import pickle
+import glob
+
+import torch
+import torch.nn.functional as F
+from torchvision import transforms
+
+from accelerate.utils import set_seed
+from datasets import load_dataset, load_from_disk
+from datasets import DatasetDict, Dataset, Image
 
 from diffusers import DDPMScheduler, UNet2DModel
 from diffusers.utils import check_min_version
 
+from trak.projectors import ProjectionType, CudaProjector
+
 # Will error if the minimal version of diffusers is not installed
 check_min_version("0.16.0")
-
-logger = logging.getLogger(__name__)
 
 
 def set_seeds(seed):
     """Set seeds for reproducibility"""
+    
     set_seed(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -36,11 +41,13 @@ def parse_args():
     parser = argparse.ArgumentParser(description="CIFAR2 Gradient Computation for Diffusion Model")
     
     # Core parameters
-    parser.add_argument("--dataset_name", type=str, default="cifar10", help="Dataset name")
     parser.add_argument("--model_config_name_or_path", type=str, required=True, help="UNet model config path")
-    parser.add_argument("--output_dir", type=str, required=True, help="Output directory containing trained model")
+    parser.add_argument("--model_path", type=str, required=True, help="Output directory containing trained model")
+    parser.add_argument("--dataset_name_or_path", type=str, default="cifar10", help="Dataset name")
+    parser.add_argument("--dataset_type", type=str, required=True, help="Type of dataset (train, val, gen)")
     parser.add_argument("--index_path", type=str, required=True, help="Path to data indices")
     parser.add_argument("--gen_path", type=str, required=True, help="Path to generated images")
+    parser.add_argument("--save_path", type=str, required=True, help="Path to save features")
     
     # Data parameters
     parser.add_argument("--resolution", type=int, default=32, help="Input image resolution")
@@ -50,9 +57,9 @@ def parse_args():
     
     # Gradient computation parameters
     parser.add_argument("--split", type=int, required=True, help="Data split index")
-    parser.add_argument("--num_timesteps_avg", type=int, required=True, help="Number of timesteps for averaging gradients")
-    parser.add_argument("--projection_dim", type=int, required=True, help="Projection dimension for gradient compression")
     parser.add_argument("--loss_function_type", type=str, required=True, help="Loss function type (mse, weighted-mse, l1-norm, l2-norm, etc.)")
+    parser.add_argument("--projection_dim", type=int, required=True, help="Projection dimension for gradient compression")
+    parser.add_argument("--num_timesteps_avg", type=int, required=True, help="Number of timesteps for averaging gradients")    
     parser.add_argument("--timestep_strategy", type=str, required=True, help="Timestep sampling strategy (uniform, cumulative)")
     
     # Seeds
@@ -63,79 +70,116 @@ def parse_args():
     return args
 
 
-def create_model(config_path):
-    """Create and configure UNet2D model"""
+def create_model(config_path, logger):
+    """Create UNet2D model from config"""
+    
+    logger.info(f"Loading model config from: {config_path}")
+
     config = UNet2DModel.load_config(config_path)
     config['resnet_time_scale_shift'] = 'scale_shift'
     model = UNet2DModel.from_config(config)
+
+    logger.info(f"Successfully created model")
+    
     return model
 
 
-def load_pretrained_model(model, model_path):
-    """Load pretrained model weights"""
-    if 'checkpoint-0' in model_path:
-        logger.info(f"Loading from checkpoint: {model_path}")
-    else:
-        weight_path = f'{model_path}/unet/diffusion_pytorch_model.bin'
-        logger.info(f"Loading weights from: {weight_path}")
-        model.load_state_dict(torch.load(weight_path))
+def load_pretrained_model(model_path, logger):
+    """Load pretrained UNet2DModel from diffusers format (supports safetensors)"""
     
+    logger.info(f"Loading UNet2DModel from: {model_path}/unet")
+
+    model_path = os.path.join(model_path, "unet")
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Model path not found: {model_path}")
+    
+    model = UNet2DModel.from_pretrained(model_path)
     model.cuda()
     model.eval()
     return model
 
 
-def create_dataset(args):
-    """Create dataset based on index path type"""
-    if "idx-train.pkl" in args.index_path:
-        # Training dataset
-        dataset = load_dataset(args.dataset_name, split="train")
-        
-        with open(args.index_path, 'rb') as handle:
-            sub_idx = pickle.load(handle)
-        
-        # Select subset based on split
-        start_idx = args.split * 1000
-        end_idx = (args.split + 1) * 1000
-        sub_idx = sub_idx[start_idx:end_idx]
-        dataset = dataset.select(sub_idx)
-        
-        logger.info(f"Training dataset: {len(dataset)} samples from split {args.split}")
-        
-    elif "idx-val.pkl" in args.index_path:
-        # Validation dataset
-        dataset = load_dataset(args.dataset_name, split="test")
-        
-        with open(args.index_path, 'rb') as handle:
-            sub_idx = pickle.load(handle)
-        
-        # Select subset based on split
-        start_idx = args.split * 1000
-        end_idx = (args.split + 1) * 1000
-        sub_idx = sub_idx[start_idx:end_idx]
-        dataset = dataset.select(sub_idx)
-        
-        logger.info(f"Validation dataset: {len(dataset)} samples from split {args.split}")
-        
+def load_train_dataset(args, logger):
+    """Load training dataset"""
+
+    if os.path.exists(args.dataset_name_or_path):
+        logger.info(f"Loading local dataset from path: {args.dataset_name_or_path}")
+        dataset = load_from_disk(os.path.join(args.dataset_name_or_path, "train"))
     else:
-        # Generated images dataset
-        df = pd.DataFrame()
-        df['path'] = [f'{args.gen_path}/{i}.png' for i in range(1000)]
-        
-        dataset = DatasetDict({
-            "train": Dataset.from_dict({
-                "img": df['path'].tolist(),
-            }).cast_column("img", Image()),
-        })
-        dataset = dataset["train"]
-        
-        logger.info(f"Generated dataset: {len(dataset)} samples")
+        logger.info(f"Loading online dataset by name: {args.dataset_name_or_path}")
+        dataset = load_dataset(args.dataset_name_or_path, split="train")
     
     return dataset
 
 
-def create_dataloader(dataset, args):
+def load_gen_dataset(args, logger):
+    """Load generated dataset"""
+
+    if not os.path.isdir(args.gen_path):
+        raise FileNotFoundError(f"Generated images path not found: {args.gen_path}")
+    
+    image_files = glob.glob(os.path.join(args.gen_path, "*.png"))
+    image_files.sort()
+    logger.info(f"Found {len(image_files)} image files in {args.gen_path}")
+
+    
+    dataset = DatasetDict({
+        "gen": Dataset.from_dict({
+            "img": image_files,
+        }).cast_column("img", Image()),
+    })
+    dataset = dataset["gen"]
+
+    return dataset
+
+
+def load_dataset(args, logger):
+    """Load dataset based on index path type"""
+    
+    logger.info(f"Loading {args.dataset_type} dataset")
+
+    if args.dataset_type == "train":
+        dataset = load_train_dataset(args, logger)
+        
+        # Select subset based on split
+        start_idx = args.split * 10000
+        end_idx = (args.split + 1) * 10000
+        dataset = dataset.select(range(start_idx, end_idx))
+        
+        logger.info(f"Successfully loaded training dataset with {len(dataset)} samples by split {args.split}")
+        
+    elif args.dataset_type == "val":
+        # Validation dataset
+        dataset = load_train_dataset(args.dataset_name_or_path, split="test")
+        logger.info(f"Successfully loaded validation dataset with {len(dataset)} samples")
+        
+    elif args.dataset_type == "gen":
+        # Generated images dataset
+        dataset = load_gen_dataset(args, logger)
+        logger.info(f"Successfully loaded generated dataset with {len(dataset)} samples")
+    
+    else:
+        raise ValueError(f"Unknown dataset type: {args.dataset_type}")
+    
+    return dataset
+
+
+def select_dataset_from_index(dataset, args, logger):
+    """Select dataset by subset indices"""
+    
+    logger.info(f"Loading indices from {args.index_path}")
+    with open(args.index_path, 'rb') as handle:
+        sub_idx = pickle.load(handle)
+    
+    dataset = dataset.select(sub_idx)
+    logger.info(f"Dataset size after filtering: {len(dataset)}")
+    
+
+def create_dataloader(dataset, args, logger):
     """Create dataloader with transforms"""
+    
+    logger.info(f"Creating training dataloader")
+    
     # Data transforms
     augmentations = transforms.Compose([
         transforms.Resize(args.resolution, interpolation=transforms.InterpolationMode.BILINEAR),
@@ -166,9 +210,8 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-def setup_projector(model, args):
+def setup_projector(model, args, logger):
     """Setup gradient projector"""
-    from trak.projectors import ProjectionType, CudaProjector
     
     grad_dim = count_parameters(model)
     projector = CudaProjector(
@@ -185,7 +228,7 @@ def setup_projector(model, args):
     return projector
 
 
-def create_loss_function(args, noise_scheduler, model):
+def create_loss_function(args, noise_scheduler, model, logger):
     """Create loss function based on args.f"""
     # Precompute weights for weighted loss functions
     weights = noise_scheduler.betas / (2 * noise_scheduler.alphas * (1 - noise_scheduler.alphas_cumprod))
@@ -236,7 +279,7 @@ def create_loss_function(args, noise_scheduler, model):
     return compute_f
 
 
-def get_timestep_strategy(args):
+def get_timestep_strategy(args, logger):
     """Get timestep sampling strategy"""
     if args.timestep_strategy == 'uniform':
         selected_timesteps = range(0, 1000, 1000 // args.num_timesteps_avg)
@@ -260,7 +303,7 @@ def vectorize_and_ignore_buffers(g):
     return torch.stack(out)
 
 
-def compute_gradients(model, dataloader, noise_scheduler, projector, args):
+def compute_gradients(model, dataloader, noise_scheduler, projector, args, logger):
     """Main gradient computation function"""
     # Setup model parameters
     params = {k: v.detach() for k, v in model.named_parameters() if v.requires_grad}
@@ -289,8 +332,8 @@ def compute_gradients(model, dataloader, noise_scheduler, projector, args):
         split_type = "gen"
     
     filename = os.path.join(
-        f'{args.output_dir}/features-{args.e_seed}',
-        f'ddpm-{split_type}-keys-{args.split}-{args.num_timesteps_avg}-{args.projection_dim}-{args.loss_function_type}-{args.timestep_strategy}.npy'
+        f'{args.save_path}/features-{args.e_seed}',
+        f'ddpm-{split_type}-keys-{args.split}-{args.loss_function_type}-{args.num_timesteps_avg}-{args.projection_dim}-{args.timestep_strategy}.npy'
     )
     
     os.makedirs(os.path.dirname(filename), exist_ok=True)
@@ -370,29 +413,32 @@ def compute_gradients(model, dataloader, noise_scheduler, projector, args):
 def main():
     args = parse_args()
     
+    # Set seeds for reproducibility
+    set_seeds(args.seed)
+    
     # Setup logging
+    logger = logging.getLogger(__name__)
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     logger.info(f"Arguments: {args}")
     
-    # Set seeds
-    set_seeds(args.seed)
-    
     # Create and load model
-    model = create_model(args.model_config_name_or_path)
-    model = load_pretrained_model(model, args.output_dir)
+    model = create_model(args.model_config_name_or_path, logger)
+    model = load_pretrained_model(model, args.model_path, logger)
     
     # Create noise scheduler
     noise_scheduler = DDPMScheduler(num_train_timesteps=1000, beta_schedule="linear")
     
     # Create dataset and dataloader
-    dataset = create_dataset(args)
-    dataloader = create_dataloader(dataset, args)
+    dataset = load_dataset(args, logger)
+    if args.dataset_type == "train" or args.dataset_type == "val":
+        dataset = select_dataset_from_index(dataset, args, logger)
+    dataloader = create_dataloader(dataset, args, logger)
     
     # Setup projector
-    projector = setup_projector(model, args)
+    projector = setup_projector(model, args, logger)
     
     # Compute gradients
-    compute_gradients(model, dataloader, noise_scheduler, projector, args)
+    compute_gradients(model, dataloader, noise_scheduler, projector, args, logger)
 
 
 if __name__ == "__main__":
